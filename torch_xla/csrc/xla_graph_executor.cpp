@@ -765,6 +765,11 @@ XLAGraphExecutor::ExecuteComputationWithBarrier(
 std::vector<torch::lazy::BackendDataPtr> XLAGraphExecutor::ExecuteStablehlo(
     std::string bytecode, const std::vector<at::IValue>& graph_inputs,
     const torch::lazy::BackendDevice& device) {
+
+
+// std::cerr << "call to XLAGraphExecutor::ExecuteStablehlo\n";
+
+
   // Convert StableHLO to HLO for XLA compilation.
   // TODO(lsy323): Pass StableHLO to PjrtComputationClient for compilation
   // after StableHLO compilation API is added in ComputationClient.
@@ -1186,6 +1191,11 @@ XLAGraphExecutor::CompilationResult XLAGraphExecutor::Compile(
     const std::vector<XLATensorPtr>& tensors,
     absl::Span<const std::string> devices, const SyncTensorCollection& coll,
     PostOrderData* po_data, const std::vector<torch::lazy::Value>& ir_values) {
+
+
+// std::cerr << "called XLAGraphExecutor::Compile\n"; 
+
+
   tsl::profiler::TraceMe activity(
       [&] {
         return tsl::profiler::TraceMeEncode(

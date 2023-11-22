@@ -14,6 +14,8 @@ import torch
 from tqdm import tqdm
 from torch.profiler import profile, record_function, ProfilerActivity
 
+import torch_xla.debug.metrics as met
+
 try:
   from .benchmark_model import ModelLoader
   from .torchbench_model import TorchBenchModelLoader
@@ -147,6 +149,155 @@ class ExperimentRunner:
             self.save_results(dummy_benchmark_experiment, dummy_benchmark_model,
                               {"error": str(e)}, None)
 
+  def inject_batch_size(self, benchmark_experiment, benchmark_model):
+    hard_coded = {
+        ("BERT_pytorch", "eval"): 32,
+        ("BERT_pytorch", "train"): 16,
+        ("Background_Matting", "eval"): 1,
+        ("Background_Matting", "train"): 4,
+        ("DALLE2_pytorch", "eval"): 1,
+        ("LearningToPaint", "eval"): 256,
+        ("LearningToPaint", "train"): 96,
+        ("Super_SloMo", "eval"): 8,
+        ("Super_SloMo", "train"): 6,
+        ("alexnet", "eval"): 1024,
+        ("alexnet", "train"): 128,
+        ("attention_is_all_you_need_pytorch", "eval"): 256,
+        ("attention_is_all_you_need_pytorch", "train"): 256,
+        ("basic_gnn_edgecnn", "eval"): 1,
+        ("basic_gnn_edgecnn", "train"): 1,
+        ("basic_gnn_gcn", "eval"): 1,
+        ("basic_gnn_gcn", "train"): 1,
+        ("basic_gnn_gin", "eval"): 1,
+        ("basic_gnn_gin", "train"): 1,
+        ("basic_gnn_sage", "eval"): 1,
+        ("basic_gnn_sage", "train"): 1,
+        ("clip", "eval"): 1,
+        ("clip", "train"): 32,
+        ("cm3leon_generate", "eval"): 1,
+        ("dcgan", "eval"): 1024,
+        ("dcgan", "train"): 32,
+        ("demucs", "eval"): 32,
+        ("demucs", "train"): 64,
+        ("densenet121", "eval"): 64,
+        ("densenet121", "train"): 256,
+        ("detectron2_fasterrcnn_r_101_c4", "eval"): 1,
+        ("detectron2_fasterrcnn_r_50_c4", "eval"): 1,
+        ("detectron2_fasterrcnn_r_50_dc5", "eval"): 1,
+        ("detectron2_maskrcnn_r_101_c4", "eval"): 2,
+        ("detectron2_maskrcnn_r_50_c4", "eval"): 1,
+        ("dlrm", "eval"): 1,
+        ("doctr_reco_predictor", "eval"): 64,
+        ("drq", "eval"): 1,
+        ("fastNLP_Bert", "eval"): 16,
+        ("fastNLP_Bert", "train"): 6,
+        ("functorch_dp_cifar10", "eval"): 512,
+        ("functorch_dp_cifar10", "train"): 64,
+        ("functorch_maml_omniglot", "eval"): 1,
+        ("functorch_maml_omniglot", "train"): 1,
+        ("hf_Albert", "eval"): 16,
+        ("hf_Albert", "train"): 8,
+        ("hf_Bart", "eval"): 8,
+        ("hf_Bart", "train"): 4,
+        ("hf_Bert", "eval"): 8,
+        ("hf_Bert", "train"): 4,
+        ("hf_Bert_large", "eval"): 4,
+        ("hf_Bert_large", "train"): 4,
+        ("hf_BigBird", "eval"): 4,
+        ("hf_BigBird", "train"): 2,
+        ("hf_DistilBert", "eval"): 16,
+        ("hf_DistilBert", "train"): 8,
+        ("hf_GPT2", "eval"): 16,
+        ("hf_GPT2", "train"): 4,
+        ("hf_GPT2_large", "eval"): 1,
+        ("hf_GPT2_large", "train"): 4,
+        ("hf_Longformer", "eval"): 4,
+        ("hf_Longformer", "train"): 2,
+        ("hf_Reformer", "eval"): 8,
+        ("hf_Reformer", "train"): 8,
+        ("hf_T5", "eval"): 4,
+        ("hf_T5", "train"): 8,
+        ("hf_T5_base", "eval"): 1,
+        ("hf_T5_generate", "eval"): 1,
+        ("hf_T5_large", "eval"): 1,
+        ("hf_T5_large", "train"): 2,
+        ("hf_Whisper", "eval"): 8,
+        ("lennard_jones", "eval"): 1000,
+        ("lennard_jones", "train"): 1000,
+        ("llama", "eval"): 32,
+        ("maml", "eval"): 1,
+        ("maml_omniglot", "eval"): 5,
+        ("maml_omniglot", "train"): 5,
+        ("mnasnet1_0", "eval"): 128,
+        ("mnasnet1_0", "train"): 32,
+        ("mobilenet_v2", "eval"): 128,
+        ("mobilenet_v2", "train"): 96,
+        ("mobilenet_v2_quantized_qat", "train"): 96,
+        ("mobilenet_v3_large", "eval"): 128,
+        ("mobilenet_v3_large", "train"): 32,
+        ("nanogpt_generate", "eval"): 1,
+        ("nvidia_deeprecommender", "eval"): 512,
+        ("nvidia_deeprecommender", "train"): 256,
+        ("opacus_cifar10", "eval"): 512,
+        ("opacus_cifar10", "train"): 64,
+        ("phlippe_densenet", "eval"): 128,
+        ("phlippe_densenet", "train"): 128,
+        ("phlippe_resnet", "eval"): 256,
+        ("phlippe_resnet", "train"): 128,
+        ("pyhpc_equation_of_state", "eval"): 1048576,
+        ("pyhpc_isoneutral_mixing", "eval"): 1048576,
+        ("pyhpc_turbulent_kinetic_energy", "eval"): 1048576,
+        ("pytorch_CycleGAN_and_pix2pix", "eval"): 1,
+        ("pytorch_CycleGAN_and_pix2pix", "train"): 1,
+        ("pytorch_stargan", "eval"): 16,
+        ("pytorch_stargan", "train"): 16,
+        ("pytorch_struct", "train"): 200,
+        ("pytorch_unet", "eval"): 4,
+        ("pytorch_unet", "train"): 1,
+        ("resnet152", "eval"): 64,
+        ("resnet152", "train"): 32,
+        ("resnet18", "eval"): 256,
+        ("resnet18", "train"): 16,
+        ("resnet50", "eval"): 64,
+        ("resnet50", "train"): 32,
+        ("resnet50_quantized_qat", "train"): 32,
+        ("resnext50_32x4d", "eval"): 64,
+        ("resnext50_32x4d", "train"): 8,
+        ("sam", "eval"): 32,
+        ("shufflenet_v2_x1_0", "eval"): 128,
+        ("shufflenet_v2_x1_0", "train"): 128,
+        ("soft_actor_critic", "eval"): 256,
+        ("speech_transformer", "eval"): 1,
+        ("speech_transformer", "train"): 32,
+        ("squeezenet1_1", "eval"): 256,
+        ("squeezenet1_1", "train"): 32,
+        ("tacotron2", "eval"): 128,
+        ("timm_efficientdet", "eval"): 128,
+        ("timm_efficientdet", "train"): 16,
+        ("timm_efficientnet", "eval"): 128,
+        ("timm_efficientnet", "train"): 32,
+        ("timm_nfnet", "eval"): 128,
+        ("timm_nfnet", "train"): 128,
+        ("timm_regnet", "eval"): 32,
+        ("timm_regnet", "train"): 32,
+        ("timm_resnest", "eval"): 256,
+        ("timm_resnest", "train"): 32,
+        ("timm_vision_transformer", "eval"): 128,
+        ("timm_vision_transformer", "train"): 32,
+        ("timm_vision_transformer_large", "eval"): 32,
+        ("timm_vovnet", "eval"): 128,
+        ("timm_vovnet", "train"): 32,
+        ("tts_angular", "eval"): 512,
+        ("tts_angular", "train"): 64,
+        ("vgg16", "eval"): 8,
+        ("vgg16", "train"): 64,
+        ("yolov3", "eval"): 8,
+        ("yolov3", "train"): 16,
+    }
+    key = benchmark_model.model_name, benchmark_experiment.test
+    if key in hard_coded:
+      benchmark_experiment.batch_size = hard_coded[key]
+
   def run_single_experiment(self, experiment_config, model_config):
     benchmark_experiment = self.experiment_loader.load_experiment(
         experiment_config)
@@ -154,12 +305,17 @@ class ExperimentRunner:
     benchmark_model = self.model_loader.load_model(model_config,
                                                    benchmark_experiment)
 
+    self.inject_batch_size(benchmark_experiment, benchmark_model)
+
     with benchmark_model.pick_grad():
       metrics = OrderedDict()
       outputs = []
       for i in range(self._args.repeat):
+        uniq_experiment = f"{benchmark_model.model_name}-{benchmark_experiment.xla}-{benchmark_experiment.dynamo}-{benchmark_experiment.test}"
+        repeat_iteration = i
         run_metrics, output = self.timed_run(benchmark_experiment,
-                                             benchmark_model)
+                                             benchmark_model, uniq_experiment,
+                                             repeat_iteration)
         output = move_to_device(output, 'cpu')
         outputs.append(output)
         for key, val in run_metrics.items():
@@ -235,23 +391,32 @@ class ExperimentRunner:
       inputs_list.append(inputs)
     return inputs_list
 
-  def dump_profile_info(self, prof, model_name):
+  def dump_profile_info(self, prof, metrics_report, model_name, uniq_experiment,
+                        repeat_iteration):
     assert prof is not None, 'Expecting profiler to be defined!'
     if not self._args.profile_cuda_dump:
       logger.warning(
           'Profiling enabled, but dumping tracing/kernel summary disabled.')
       return
 
-    file_path = f"/tmp/{model_name}-profile"
+    file_path = f"{self._args.profile_cuda_dump}/{uniq_experiment}-profile"
     os.makedirs(file_path, exist_ok=True)
-    prof.export_chrome_trace(os.path.join(file_path, "trace.json"))
+    prof.export_chrome_trace(
+        os.path.join(file_path, f"trace-{repeat_iteration}.json"))
 
-    kernel_dump = prof.key_averages().table(
-        sort_by="cuda_time_total", row_limit=500)
-    with open(os.path.join(file_path, "kernel_dump.txt"), "a") as f:
-      f.write(kernel_dump)
+    with open(
+        os.path.join(file_path, f"pt-profile-{repeat_iteration}.txt"),
+        "w") as f:
+      f.write(prof.key_averages().table(sort_by="cuda_time_total"))
 
-  def timed_run(self, benchmark_experiment, benchmark_model):
+    if "PJRT" in uniq_experiment:
+      with open(
+          os.path.join(file_path, f"ptxla-metrics-{repeat_iteration}.txt"),
+          "w") as f:
+        f.write(metrics_report)
+
+  def timed_run(self, benchmark_experiment, benchmark_model, uniq_experiment,
+                repeat_iteration):
 
     reset_rng_state(benchmark_experiment)
 
@@ -287,6 +452,7 @@ class ExperimentRunner:
       return output
 
     if enable_prof:
+      met.clear_all()
       with profile(
           activities=[ProfilerActivity.CUDA, ProfilerActivity.CPU]) as prof:
         output = loop(prof)
@@ -297,7 +463,9 @@ class ExperimentRunner:
 
     t_end = time.perf_counter()
     if enable_prof:
-      self.dump_profile_info(prof, benchmark_model.model_name)
+      self.dump_profile_info(prof, met.metrics_report(),
+                             benchmark_model.model_name, uniq_experiment,
+                             repeat_iteration)
 
     metrics["total_time"] = t_end - t_start
     metrics[

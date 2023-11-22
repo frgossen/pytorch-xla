@@ -10,6 +10,7 @@
 #include "torch_xla/csrc/runtime/computation_client.h"
 #include "torch_xla/csrc/runtime/debug_macros.h"
 #include "torch_xla/csrc/runtime/runtime.h"
+#include <iostream>
 
 namespace at {
 // This function is defined in the codegenerated RegisterDispatchKey.cpp file.
@@ -124,6 +125,9 @@ class XlaBackendImpl : public torch::lazy::BackendImplInterface {
 
   std::vector<torch::lazy::ComputationPtr> Compile(
       std::vector<torch::lazy::ComputationPtr> instances) const override {
+
+// std::cerr << "call to Compile\n";
+
     std::vector<torch::lazy::ComputationPtr> res;
     std::vector<runtime::ComputationClient::CompileInstance> compile_instances;
     torch::lazy::BackendDevice current_device = bridge::GetCurrentDevice();
@@ -162,6 +166,9 @@ class XlaBackendImpl : public torch::lazy::BackendImplInterface {
       torch::lazy::ComputationPtr computation,
       c10::ArrayRef<torch::lazy::BackendDataPtr> arguments,
       const torch::lazy::BackendDevice& device) const override {
+
+// std::cerr << "call to ExecuteComputation\n";
+
     std::vector<runtime::ComputationClient::DataPtr> results =
         runtime::GetComputationClient()->ExecuteComputation(
             *std::dynamic_pointer_cast<runtime::ComputationClient::Computation>(

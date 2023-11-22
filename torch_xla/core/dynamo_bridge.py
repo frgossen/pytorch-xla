@@ -455,6 +455,19 @@ class InputCollector(torch.fx.Interpreter):
 
 
 def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
+
+
+
+  print(f"[BRIDGE] extract_compiled_graph start")
+
+
+
+  # print("hety")
+  # print(xla_model)
+  # print(xla_args)
+
+
+
   # Synchronize xla_args, so that each FunctionalTensorWrapper argument updates its
   # value reference before actually computing it.
   for a in xla_args:
@@ -489,6 +502,9 @@ def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
   collector = FallBackNodeCollector(xla_model)
   collector.run(*xla_args)
   fallback_ops = collector.get_fallback_ops()
+
+  # print(f"fallback_ops = {fallback_ops}")
+
   if (ptxla_debug or dynamo_debug) and len(fallback_ops) > 0:
     print('Dynamo fallback ops are' + str(fallback_ops) +
           '. Please open a GitHub issue with the above op lowering requests.')
@@ -500,6 +516,8 @@ def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
   args_need_update_bool = torch_xla._XLAC._check_tensor_need_materialization(
       all_xla_args)
 
+
+
   # Again, same logic in the `extract_internal` above to support in-place operations.
   # TODO (@wonjoo): Make this duplicate code a bit cleaner.
   for i, need_update in enumerate(args_need_update_bool):
@@ -507,6 +525,9 @@ def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
       all_xla_args[i].copy_(cloned_args[i])
 
   torch_xla._XLAC._clear_pending_irs(str(xm.xla_device()))
+
+
+
 
   class XlaOperatorSupport(torch.fx.passes.operator_support.OperatorSupport):
 
@@ -521,6 +542,8 @@ def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
       xla_model, supported_ops, allows_single_node_partition=True)
   partitions = partitioner.propose_partitions()
 
+
+
   # propose_partitions() does not guarantee topolgical order, so sort it manually
   for partition in partitions:
     partition.nodes = topo_sort(partition.nodes)
@@ -529,17 +552,31 @@ def extract_compiled_graph(xla_model: torch.fx.GraphModule, xla_args):
   partitioned_graph = partitioner.fuse_partitions(partitions)
   InputCollector(partitioned_graph).run(*xla_args)
 
+
+
+
+
+
   # compile each submodule and replace it with a call
   for node in partitioned_graph.graph.nodes:
     if node.op == "call_module" and "fused_" in node.name:
       fused_module = getattr(partitioned_graph, node.name)
       partitioned_graph.delete_submodule(node.target)
       with partitioned_graph.graph.inserting_after(node):
-        new_node = partitioned_graph.graph.call_function(
-            extract_internal(fused_module), node.args, None)
+        new_node = partitioned_graph.graph.call_function(extract_internal(fused_module), node.args, None)
         node.replace_all_uses_with(new_node)
       partitioned_graph.graph.erase_node(node)
 
   partitioned_graph.recompile()
+
+
+
+  # print(f"final partitioned_graph = {partitioned_graph}")
+
+
+
+  print(f"[BRIDGE] extract_compiled_graph done")
+
+
 
   return partitioned_graph
